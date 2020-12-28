@@ -7,23 +7,6 @@ import numpy as np
 import re
 
 
-# class mySerial():
-#     def __init__(self):
-#         self.ser=serial.Serial()
-
-#         self.ser.timeout=10 # probably should be way faster
-    
-#     def set_baudrate(self, baudrate):
-#         self.ser.baudrate = baudrate
-    
-#     def set_timeout(self, timeout):
-#         self.ser.timeout=timeout
-
-#     def set_port(self, port):
-#         self.ser.port=port
-
-    
-# def list_devices(self):
 def list_devices():
     print("Available devices:")
     for port, desc, hwid in sorted(serial.tools.list_ports.comports()):
