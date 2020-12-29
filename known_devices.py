@@ -1,7 +1,7 @@
 import re
 
 
-def gStrength_chunk_parser(raw, buf):
+def __gStrength_chunk_parser__(raw, buf):
     valslist=[]
 
     for val in raw.split(b'\r\n'):
@@ -28,7 +28,7 @@ def gStrength_chunk_parser(raw, buf):
         valslist.append(float(val))
     return valslist, buf
 
-def gStrength_line_parser(line):
+def __gStrength_line_parser__(line):
     try:
         return float(line)
     except ValueError:
@@ -41,22 +41,13 @@ gStrength={
     'preferred_port_type': 'usb',
     'cmd_stop': bytes(b'w'),
     'cmd_zero': bytes(b't'),
+    'rate_start1': 0.0125, # one sample every 12.5 ms
     'cmd_start1': bytes(b'e'),
+    'rate_start2': 0.025, # one sample every 25 ms
     'cmd_start2': bytes(b'q'),
-    'chunk_parser': gStrength_chunk_parser,
-    'line_parser': gStrength_line_parser
+    'chunk_parser': __gStrength_chunk_parser__,
+    'line_parser': __gStrength_line_parser__,
+    'manufacturer':'Adafruit'
 }
 
-simulated_gStrength={
-    'name': 'Simulated gStrength V1',
-    'baud': 115200,
-    'timeout': None,
-    'preferred_port_type': 'usb',
-    'cmd_stop': bytes(b'w'),
-    'cmd_zero': bytes(b't'),
-    'cmd_start1': bytes(b'e'),
-    'cmd_start2': bytes(b'q'),
-    'chunk_parser': gStrength_chunk_parser,
-    'line_parser': gStrength_line_parser
-
-}
+all_known_devices=[gStrength]

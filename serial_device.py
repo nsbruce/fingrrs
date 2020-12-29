@@ -1,18 +1,26 @@
-import known_devices
+import known_devices as kd
 import serial
 import serial.tools.list_ports
 
-def list_devices():
+def print_available_devices():
     print("Available devices:")
     for port, desc, hwid in sorted(serial.tools.list_ports.comports()):
+        #TODO check if this is the same for windows
+        if desc=='n/a' and hwid=='n/a':
+            continue
+    else:
         print("{}: {} [{}]".format(port, desc, hwid))
+
+def get_available_devices():
+    return [x for x in serial.tools.list_ports.comports() if x.hwid!='n/a' and x.description!='n/a']            
 
 class mySerial:
     def __init__(self, mydev):
         self.port=self.get_port(mydev['preferred_port_type'])
         self.baudrate=mydev['baud']
         self.timeout=mydev['timeout']
-        self.cmd_start=mydev['cmd_start1'] #TODO what if there are two
+        self.cmd_start=mydev['cmd_start1'] #TODO what if there are two (there are for gStrength)
+        self.rate=mydev['rate_start1'] #TODO again what if there are two (there are for gStrength)
         self.cmd_zero=mydev['cmd_zero']
         self.cmd_stop=mydev['cmd_stop']
         self.chunk_parser=mydev['chunk_parser']
