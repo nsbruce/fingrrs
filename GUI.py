@@ -16,6 +16,7 @@ import serial_device as sd
 import plotter
 import utils
 from modals import UpdateStatDialog
+from data_structs import myStat
 
 
 
@@ -26,14 +27,12 @@ class MyWidget(QtGui.QWidget):
         self.device = None
         self.available_devices = []
 
+        # print(type(self))
+
         self.xdata_raw=[]
         self.ydata_raw=[]
 
         # self.ydata_fn = plotter.default_kg
-
-        self.stats = []
-        self.max_value=0
-        self.user_weight=0
 
         self.is_streaming=False
 
@@ -138,25 +137,17 @@ class MyWidget(QtGui.QWidget):
         # Setup group for stats pane
         stats_group = QtGui.QGroupBox('Statistics')
         stats_form = QtGui.QFormLayout()
+        
+        self.stats = {}
+        self.stats['current_val'] = myStat(name='current_val', value=0, qlabel=QtGui.QLabel('Current value (kg):'), display_element=QtGui.QLCDNumber())
+        self.stats['user_weight'] = myStat(name='user_weight', value=0, qlabel=QtGui.QLabel('User weight (kg):'), display_element=QtGui.QLCDNumber())
+        self.stats['max_pull'] = myStat(name='max_pull', value=0, qlabel=QtGui.QLabel('Max pull (kg):'), display_element=QtGui.QLCDNumber())
 
-        #TODO this can be done programatically without naming each item. Make a self.qlabel and self.lcd in the Stat class.
-        self.stats_current_value_label = QtGui.QLabel('Current value (kg): ')
-        self.stats_current_value_disp = QtGui.QLCDNumber()
-        self.stats_current_value_disp.setSegmentStyle(QtGui.QLCDNumber.Flat)
-        self.stats_current_value_disp.setMinimumHeight(40)
-        stats_form.addRow(self.stats_current_value_label, self.stats_current_value_disp)
-
-        self.stats_max_value_label = QtGui.QLabel('Max value (kg): ')
-        self.stats_max_value_disp = QtGui.QLCDNumber()
-        self.stats_max_value_disp.setSegmentStyle(QtGui.QLCDNumber.Flat)
-        self.stats_max_value_disp.setMinimumHeight(40)
-        stats_form.addRow(self.stats_max_value_label, self.stats_max_value_disp)
-
-        self.stats_weight_label = QtGui.QLabel('User weight (kg): ')
-        self.stats_weight_disp = QtGui.QLCDNumber()
-        self.stats_weight_disp.setSegmentStyle(QtGui.QLCDNumber.Flat)
-        self.stats_weight_disp.setMinimumHeight(40)
-        stats_form.addRow(self.stats_weight_label, self.stats_weight_disp)
+        for stat in self.stats.values():
+            stat.display_element.setSegmentStyle(QtGui.QLCDNumber.Flat)
+            stat.display_element.setMinimumHeight(40)
+            stat.display_element.display(stat.value)
+            stats_form.addRow(stat.qlabel, stat.display_element)
 
         # Assign layout to stats group
         stats_group.setLayout(stats_form)
@@ -185,9 +176,10 @@ class MyWidget(QtGui.QWidget):
         main_layout.addWidget(plot_group,0,1,5,5)
         main_layout.addWidget(stats_group,0,6,5,5)
 
-        test_btn=QtGui.QPushButton('Test')
-        test_btn.clicked.connect(self.update_stat_dialog)
-        main_layout.addWidget(test_btn)
+        #? For testing
+        # test_btn=QtGui.QPushButton('Test')
+        # test_btn.clicked.connect(self.update_stat_dialog)
+        # main_layout.addWidget(test_btn)
 
         self.setLayout(main_layout)
 
@@ -225,7 +217,7 @@ class MyWidget(QtGui.QWidget):
             self.mode_dropdown.setEnabled(True)
             self.save_btn.setEnabled(False)
 
-            self.stats_current_value_disp.display(0)
+            self.stats['current_val'].display_element.display(0)
 
             self.device.open()
 
@@ -268,11 +260,7 @@ class MyWidget(QtGui.QWidget):
 
 
     def update_stats(self):
-        self.stats_current_value_disp.display(self.ydata_raw[-1])
-        # if self.mode_dropdown.currentIndex()==0: # 'Max force' 
-        #     self.stats_max_value_disp.display(max(self.ydata_raw))
-        # elif self.mode_dropdown.currentIndex()==1: # 'Weigh user'
-        #     self.stats_weight_disp.display(self.ydata_raw[-1])
+        self.stats['current_val'].display_element.display(self.ydata_raw[-1])
 
 
     def check_weight(self):
@@ -357,13 +345,12 @@ class MyWidget(QtGui.QWidget):
         self.clear_plot_btn.setEnabled(True)
 
         self.stop_timers()
-        self.stats_current_value_disp.display(0)
+        self.stats['current_val'].display_element.display(0)
         self.device.stop_stream()
         self.is_streaming=False
 
         if self.mode_dropdown.currentIndex()==0: # max force was measured
             temp_max=max(self.ydata_raw)
-            # self.stats_max_value_disp.display(self.max_value)
             time_at_max = self.xdata_raw[self.ydata_raw.index(temp_max)]
             max_arrow = pg.CurveArrow(self.curve, index=self.ydata_raw.index(temp_max), pen=self.plot_format['max-arrow-pen'], brush=self.plot_format['max-arrow-brush'], angle=90)
             max_arrow_label=pg.TextItem(text=f"{time_at_max:.4f} s, {temp_max} kg", border=self.plot_format['max-arrow-pen'], color=self.plot_format['max-arrow-label-color'], anchor=(0,1))
@@ -379,17 +366,17 @@ class MyWidget(QtGui.QWidget):
 
     def update_stat_dialog(self, new_val):
         if self.mode_dropdown.currentIndex()==0: #Max force
-            dlg = UpdateStatDialog(old_val=self.max_value, new_val=new_val, stat_name='max pull stat')
+            dlg = UpdateStatDialog(old_val=self.stats['max_pull'].value, new_val=new_val, stat_name='max pull stat')
             if dlg.exec_():
-                self.max_value = new_val
-                self.stats_max_value_disp.display(self.max_value)
+                self.stats['max_pull'].value = new_val
+                self.stats['max_pull'].display_element.display(self.stats['max_pull'].value)
             else:
                 del new_val
         elif self.mode_dropdown.currentIndex()==1: #Weight
-            dlg = UpdateStatDialog(old_val=self.user_weight, new_val=new_val, stat_name='user weight stat')
+            dlg = UpdateStatDialog(old_val=self.stats['user_weight'].value, new_val=new_val, stat_name='user weight stat')
             if dlg.exec_():
-                self.user_weight = new_val
-                self.stats_weight_disp.display(self.user_weight)
+                self.stats['user_weight'].value = new_val
+                self.stats['user_weight'].display_element.display(self.stats['user_weight'].value)
                 self.mode_dropdown.clear()
                 self.modes[1]='Reweigh user'
                 self.mode_dropdown.addItems(self.modes)
@@ -405,7 +392,7 @@ class MyWidget(QtGui.QWidget):
             fname=names[0]
         else:
             fname=names[0]+'.csv'
-        df = pd.DataFrame(data={"t": self.xdata_raw, "kg": self.ydata_raw})
+        df = pd.DataFrame(data={"t": self.xdata_raw, "kg": self.ydata_raw, "user_weight": self.stats['user_weight'], "max_pull": self.stats['max_pull']})
         df.to_csv(fname, sep=',',index=False)
 
 
@@ -418,24 +405,6 @@ class MyWidget(QtGui.QWidget):
         yaxis_modal = QtGui.QDialog(self)
 
         yaxis_modal.exec_()
-
-
-#? Should this be a class? I miss structs
-#TODO https://stackoverflow.com/questions/35988/c-like-structures-in-python
-class Stat:
-    def __init__(self, label=None, value=None, unit=None, mode=None):
-        self.label=label
-        self.value=value
-        self.unit=unit
-        self.mode=mode
-    def setLabel(self,label):
-        self.label=label
-    def setValue(self, value):
-        self.value=value
-    def setUnit(self,unit):
-        self.unit=unit
-    def setMode(self, mode):
-        self.mode=mode
 
 
 def main():
