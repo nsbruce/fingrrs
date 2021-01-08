@@ -39,6 +39,7 @@ gStrength={
     'baud': 115200,
     'timeout': None,
     'preferred_port_type': 'usb',
+    # 'preferred_port_type': 'Bluetooth',
     'cmd_stop': bytes(b'w'),
     'cmd_zero': bytes(b't'),
     'rate_start1': 0.0125, # one sample every 12.5 ms

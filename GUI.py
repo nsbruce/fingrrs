@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import sys
 import time
+from dataclasses import dataclass
 
 from PyQt5 import QtGui, QtCore
 import pyqtgraph as pg
@@ -12,6 +13,9 @@ pg.setConfigOption('foreground', 'k')
 
 import known_devices as kd
 import serial_device as sd
+import plotter
+import utils
+from modals import UpdateStatDialog
 
 
 
@@ -22,29 +26,41 @@ class MyWidget(QtGui.QWidget):
         self.device = None
         self.available_devices = []
 
-        self.xdata=[]
-        self.ydata=[]
+        self.xdata_raw=[]
+        self.ydata_raw=[]
+
+        # self.ydata_fn = plotter.default_kg
+
+        self.stats = []
+        self.max_value=0
+        self.user_weight=0
+
+        self.is_streaming=False
 
         self.setupUI()
 
 
     def setupUI(self):
         # Setup timers
-        self.plot_timer = QtCore.QTimer()
-        self.plot_timer.setInterval(25) # 25 ms - this is approximately 30 Hz and we can't see anything much faster I don't think
-        self.plot_timer.timeout.connect(self.update_plot)
-
         self.refresh_avail_devices_timer = QtCore.QTimer()
         self.refresh_avail_devices_timer.setInterval(5000) # 5 s
         self.refresh_avail_devices_timer.timeout.connect(self.refresh_available_devices)
         self.refresh_avail_devices_timer.start() #TODO shouldn't run while the plot is running?
 
+        self.plot_timer = QtCore.QTimer()
+        self.plot_timer.timeout.connect(self.update_plot)
+
         self.stats_timer = QtCore.QTimer()
-        self.stats_timer.setInterval(25) # ms
         self.stats_timer.timeout.connect(self.update_stats)
 
+        self.scale_timer = QtCore.QTimer()
+        self.scale_timer.timeout.connect(self.check_weight)
+
+        self.data_timer = QtCore.QTimer()
+        self.data_timer.timeout.connect(self.update_data)
+
         # Window properties
-        self.setWindowTitle("Flex tester")
+        self.setWindowTitle("Fingrrs Desktop")
         # self.resize(1000,800) # This works though
 
         # Setup group for session control buttons
@@ -70,12 +86,6 @@ class MyWidget(QtGui.QWidget):
         self.stop_btn.setEnabled(False)
         session_ctrl_group_layout.addWidget(self.stop_btn)
 
-        self.reset_btn = QtGui.QPushButton('Reset')
-        self.reset_btn.setToolTip('Erase data and prepare to start again')
-        self.reset_btn.clicked.connect(self.reset_btn_pushed)
-        self.reset_btn.setEnabled(False)
-        session_ctrl_group_layout.addWidget(self.reset_btn)
-
         # Assign layout to session_gtrl_group
         session_ctrl_group.setLayout(session_ctrl_group_layout)
 
@@ -85,16 +95,7 @@ class MyWidget(QtGui.QWidget):
         plot_group_layout = QtGui.QGridLayout()
 
         self.plot = pg.PlotWidget()
-        self.plot_format={
-            'pen':pg.mkPen(width=3, color=(0, 0, 0) ),
-            'axis-label-styles':{'color':(0,0,0), 'font-size':30},
-            'left-label': 'Weight (kg)',
-            'bottom-label': 'Time (s)'
-            }
-        self.plot.setLabel('left', self.plot_format['left-label'], **self.plot_format['axis-label-styles'])
-        self.plot.setLabel('bottom', self.plot_format['bottom-label'], **self.plot_format['axis-label-styles'])
-        # self.plot.setMouseEnabled(x=True, y=False)
-        self.curve = self.plot.plot(pen=self.plot_format['pen'])
+        self.initialize_plot()
         plot_group_layout.addWidget(self.plot)
 
         self.save_btn = QtGui.QPushButton('Save data')
@@ -103,11 +104,19 @@ class MyWidget(QtGui.QWidget):
         self.save_btn.setEnabled(False)
         plot_group_layout.addWidget(self.save_btn)
 
-        self.set_yaxis_btn = QtGui.QPushButton('Set y-axis options')
-        self.set_yaxis_btn.setToolTip('Options for how the y-axis is plotted')
-        self.set_yaxis_btn.clicked.connect(self.set_yaxis_options)
-        self.set_yaxis_btn.setEnabled(True)
-        plot_group_layout.addWidget(self.set_yaxis_btn)
+        self.clear_plot_btn = QtGui.QPushButton('Clear plot')
+        self.clear_plot_btn.setToolTip('Erase plot (does not clear stats')
+        self.clear_plot_btn.clicked.connect(self.clear_plot)
+        self.clear_plot_btn.setEnabled(False)
+        plot_group_layout.addWidget(self.clear_plot_btn)
+
+
+        #TODO implement
+        # self.set_yaxis_btn = QtGui.QPushButton('Set y-axis options')
+        # self.set_yaxis_btn.setToolTip('Options for how the y-axis is plotted')
+        # self.set_yaxis_btn.clicked.connect(self.set_yaxis_options)
+        # self.set_yaxis_btn.setEnabled(True)
+        # plot_group_layout.addWidget(self.set_yaxis_btn)
 
         # Assign layout to plot_group
         plot_group.setLayout(plot_group_layout)
@@ -115,7 +124,6 @@ class MyWidget(QtGui.QWidget):
         # Setup group for configuration items
         configuration_group = QtGui.QGroupBox('Device configuration')
         configuration_group_layout = QtGui.QGridLayout()
-
 
         self.change_device_dropdown = QtGui.QComboBox()
         self.refresh_available_devices()
@@ -129,34 +137,78 @@ class MyWidget(QtGui.QWidget):
 
         # Setup group for stats pane
         stats_group = QtGui.QGroupBox('Statistics')
-        # stats_group_layout = QtGui.QGridLayout()
         stats_form = QtGui.QFormLayout()
 
-        self.stats_max_value_label = QtGui.QLabel('Max value (kg): ')
+        #TODO this can be done programatically without naming each item. Make a self.qlabel and self.lcd in the Stat class.
+        self.stats_current_value_label = QtGui.QLabel('Current value (kg): ')
+        self.stats_current_value_disp = QtGui.QLCDNumber()
+        self.stats_current_value_disp.setSegmentStyle(QtGui.QLCDNumber.Flat)
+        self.stats_current_value_disp.setMinimumHeight(40)
+        stats_form.addRow(self.stats_current_value_label, self.stats_current_value_disp)
 
+        self.stats_max_value_label = QtGui.QLabel('Max value (kg): ')
         self.stats_max_value_disp = QtGui.QLCDNumber()
         self.stats_max_value_disp.setSegmentStyle(QtGui.QLCDNumber.Flat)
         self.stats_max_value_disp.setMinimumHeight(40)
-
         stats_form.addRow(self.stats_max_value_label, self.stats_max_value_disp)
+
+        self.stats_weight_label = QtGui.QLabel('User weight (kg): ')
+        self.stats_weight_disp = QtGui.QLCDNumber()
+        self.stats_weight_disp.setSegmentStyle(QtGui.QLCDNumber.Flat)
+        self.stats_weight_disp.setMinimumHeight(40)
+        stats_form.addRow(self.stats_weight_label, self.stats_weight_disp)
 
         # Assign layout to stats group
         stats_group.setLayout(stats_form)
 
+        # Setup group for mode of use
+        mode_group = QtGui.QGroupBox('Mode')
+        mode_group_layout = QtGui.QGridLayout()
+
+        self.modes = ['Max force', 'Weigh user']
+        self.mode_dropdown = QtGui.QComboBox()
+        self.mode_dropdown.addItems(self.modes)
+        self.mode_dropdown.setCurrentIndex(0)
+        # self.mode_dropdown.currentIndexChanged.connect(self.set_mode)
+        self.mode_dropdown.setEnabled(False)
+        mode_group_layout.addWidget(self.mode_dropdown)
+
+        mode_group.setLayout(mode_group_layout)
 
         # Setup a layout of the widgets
         main_layout = QtGui.QGridLayout()
 
         # Give organize main layout
         main_layout.addWidget(configuration_group,0,0,1,1)
-        main_layout.addWidget(session_ctrl_group,1,0,4,1)
+        main_layout.addWidget(mode_group,1,0,1,1)
+        main_layout.addWidget(session_ctrl_group,2,0,3,1)
         main_layout.addWidget(plot_group,0,1,5,5)
         main_layout.addWidget(stats_group,0,6,5,5)
+
+        test_btn=QtGui.QPushButton('Test')
+        test_btn.clicked.connect(self.update_stat_dialog)
+        main_layout.addWidget(test_btn)
 
         self.setLayout(main_layout)
 
         # Make the window appear
         self.show()
+
+    def initialize_plot(self):
+        self.plot_format={
+            'pen':pg.mkPen(width=3, color=(0, 0, 0) ),
+            'axis-label-styles':{'color':(0,0,0), 'font-size':30},
+            'left-label': 'Weight (kg)',
+            'bottom-label': 'Time (s)',
+            'scale-pen':pg.mkPen(width=2, color=(255, 0, 0), style=QtCore.Qt.DashLine ),
+            'max-arrow-pen':pg.mkPen(width=2,color=(255,0,0)),
+            'max-arrow-brush':pg.mkBrush(color=(255,0,0)),
+            'max-arrow-label-color': (255,0,0)
+            }
+        self.plot.setLabel('left', self.plot_format['left-label'], **self.plot_format['axis-label-styles'])
+        self.plot.setLabel('bottom', self.plot_format['bottom-label'], **self.plot_format['axis-label-styles'])
+        # self.plot.setMouseEnabled(x=True, y=False)
+        self.curve = self.plot.plot(pen=self.plot_format['pen'])
 
 
     def choose_device(self, i):
@@ -166,8 +218,17 @@ class MyWidget(QtGui.QWidget):
             if initial_device!=None and initial_device.is_open:
                 initial_device.close()
 
-            self.reset_btn_pushed()
+            self.stop_btn.setEnabled(False)
+            self.zero_btn.setEnabled(True)
+            self.start_btn.setEnabled(True)
+            self.change_device_dropdown.setEnabled(True)
+            self.mode_dropdown.setEnabled(True)
+            self.save_btn.setEnabled(False)
+
+            self.stats_current_value_disp.display(0)
+
             self.device.open()
+
 
     def refresh_available_devices(self):   
         newly_availably_devices=[]
@@ -181,59 +242,160 @@ class MyWidget(QtGui.QWidget):
             self.change_device_dropdown.clear()
             self.change_device_dropdown.addItems([dev['name'] for dev in self.available_devices])
 
+
     def update_plot(self):
+        if self.mode_dropdown.currentIndex()==0: # max force
+            self.curve.setData(self.xdata_raw,self.ydata_raw)
+        elif self.mode_dropdown.currentIndex()==1: # scale mode
+            # print(f"xdata: {self.xdata_scale}")
+            self.curve.setData(self.xdata_scale, self.ydata_scale)
+        # curve.setPos(ptr,0) # might be useful if I want a moving window.
+
+
+    def update_data(self):
         newypoints = self.device.get_all()
-        xstart=self.xdata[-1]+self.device.rate if len(self.xdata)>0 else 0
+        xstart=self.xdata_raw[-1]+self.device.rate if len(self.xdata_raw)>0 else 0
         newxpoints = np.linspace(xstart,xstart+(len(newypoints)-1)*self.device.rate,len(newypoints)).tolist() 
 
-        self.ydata.extend(newypoints)
-        self.xdata.extend(newxpoints)
-        self.curve.setData(self.xdata,self.ydata)
-        # curve.setPos(ptr,0) # might be useful if I want a moving window.
-    
+        self.ydata_raw.extend(newypoints)
+        self.xdata_raw.extend(newxpoints)
+
+        if self.mode_dropdown.currentIndex()==1: # scale mode
+            scale_window=0.5 # length of rolling window average
+            self.ydata_scale = utils.moving_average(self.ydata_raw, int(scale_window/self.device.rate)) # moving average with window 0.5s
+            xstart = scale_window/2
+            self.xdata_scale = np.linspace(xstart,xstart+(len(self.ydata_scale)-1)*self.device.rate,len(self.ydata_scale)).tolist() 
+
+
     def update_stats(self):
-        self.stats_max_value_disp.display(max(self.ydata))
+        self.stats_current_value_disp.display(self.ydata_raw[-1])
+        # if self.mode_dropdown.currentIndex()==0: # 'Max force' 
+        #     self.stats_max_value_disp.display(max(self.ydata_raw))
+        # elif self.mode_dropdown.currentIndex()==1: # 'Weigh user'
+        #     self.stats_weight_disp.display(self.ydata_raw[-1])
+
+
+    def check_weight(self):
+        start_samps = int(5/self.device.rate)
+        required_samps = int(3/self.device.rate)
+        scale_threshold = 1 # kg difference between max and min 
+        if len(self.ydata_raw) > start_samps and max(self.ydata_scale[-required_samps:])-min(self.ydata_scale[-required_samps:]) <= scale_threshold:
+            self.stop_btn_pushed()
+
+
+    def max_force_mode(self):
+        self.mode_timers=[self.data_timer, self.plot_timer, self.stats_timer]
+        self.set_start_mode_timers(25)
+
+    def scale_mode(self):
+        self.ydata_scale=[]
+        self.xdata_scale=[]
+
+        self.mode_timers=[self.data_timer, self.plot_timer, self.stats_timer, self.scale_timer]
+        self.set_start_mode_timers(interval=100)
+
+    def set_start_mode_timers(self, interval):
+        for timer in self.mode_timers:
+            timer.setInterval(interval)
+            timer.start()
+
+    def stop_timers(self):
+        for timer in self.mode_timers:
+            timer.stop()
+
+
 
     def start_btn_pushed(self):
+        self.clear_data()
+        self.clear_plot()
+
         self.start_btn.setEnabled(False)
         self.zero_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
         self.change_device_dropdown.setEnabled(False)
-        self.reset_btn.setEnabled(False)
         self.save_btn.setEnabled(False)
+        self.mode_dropdown.setEnabled(False)
 
         self.device.start_stream()
-        self.plot_timer.start()
-        self.stats_timer.start()
-    
-    def reset_btn_pushed(self):
-        self.xdata=[]
-        self.ydata=[]
-        self.curve.setData(self.ydata, self.xdata)
+        if self.mode_dropdown.currentIndex()==0: # max force mode
+            self.max_force_mode()
+        if self.mode_dropdown.currentIndex()==1: # weigh user
+            self.stop_btn.setEnabled(False)
+            self.scale_mode()
+        
+        self.is_streaming=True
 
-        self.zero_btn.setEnabled(False)
-        self.start_btn.setText('Start')
-        self.start_btn.setEnabled(True)
-        self.change_device_dropdown.setEnabled(True)
-        self.stop_btn.setEnabled(False)
-        self.reset_btn.setEnabled(False)
-        self.save_btn.setEnabled(False)
+
+    def clear_data(self):
+        self.xdata_raw=[]
+        self.ydata_raw=[]
+
+
+    def clear_plot(self):
+        # self.curve.setData([],[])
+        self.plot.clear()
+        self.initialize_plot()
+
 
     def zero_btn_pushed(self):
+        if self.is_streaming:
+            self.device.zero_stream()
+        else:
+            self.device.start_stream()
+            self.device.zero_stream()
+            self.device.stop_stream()
+
         self.device.zero_stream()
 
     def stop_btn_pushed(self):
         self.stop_btn.setEnabled(False)
-        self.zero_btn.setEnabled(False)
-        self.start_btn.setText('Continue')
+        self.zero_btn.setEnabled(True)
         self.start_btn.setEnabled(True)
         self.change_device_dropdown.setEnabled(True)
-        self.reset_btn.setEnabled(True)
         self.save_btn.setEnabled(True)
+        self.mode_dropdown.setEnabled(True)
+        self.clear_plot_btn.setEnabled(True)
 
-        self.plot_timer.stop()
-        self.stats_timer.stop()
+        self.stop_timers()
+        self.stats_current_value_disp.display(0)
         self.device.stop_stream()
+        self.is_streaming=False
+
+        if self.mode_dropdown.currentIndex()==0: # max force was measured
+            temp_max=max(self.ydata_raw)
+            # self.stats_max_value_disp.display(self.max_value)
+            time_at_max = self.xdata_raw[self.ydata_raw.index(temp_max)]
+            max_arrow = pg.CurveArrow(self.curve, index=self.ydata_raw.index(temp_max), pen=self.plot_format['max-arrow-pen'], brush=self.plot_format['max-arrow-brush'], angle=90)
+            max_arrow_label=pg.TextItem(text=f"{time_at_max:.4f} s, {temp_max} kg", border=self.plot_format['max-arrow-pen'], color=self.plot_format['max-arrow-label-color'], anchor=(0,1))
+            max_arrow_label.setPos(time_at_max,temp_max)
+            self.plot.addItem(max_arrow)
+            self.plot.addItem(max_arrow_label)
+            self.update_stat_dialog(new_val=temp_max)
+        elif self.mode_dropdown.currentIndex()==1: # weighed something
+            temp_user_weight=np.average(self.ydata_scale[-int(3/self.device.rate):])
+            self.plot.addLine(y=temp_user_weight, pen=self.plot_format['scale-pen'])
+            self.update_stat_dialog(new_val=temp_user_weight)
+
+
+    def update_stat_dialog(self, new_val):
+        if self.mode_dropdown.currentIndex()==0: #Max force
+            dlg = UpdateStatDialog(old_val=self.max_value, new_val=new_val, stat_name='max pull stat')
+            if dlg.exec_():
+                self.max_value = new_val
+                self.stats_max_value_disp.display(self.max_value)
+            else:
+                del new_val
+        elif self.mode_dropdown.currentIndex()==1: #Weight
+            dlg = UpdateStatDialog(old_val=self.user_weight, new_val=new_val, stat_name='user weight stat')
+            if dlg.exec_():
+                self.user_weight = new_val
+                self.stats_weight_disp.display(self.user_weight)
+                self.mode_dropdown.clear()
+                self.modes[1]='Reweigh user'
+                self.mode_dropdown.addItems(self.modes)
+                self.mode_dropdown.setCurrentIndex(0)
+            else:
+                del new_val
 
     def save_btn_pushed(self):
         names = QtGui.QFileDialog.getSaveFileName(self, 'Save data as CSV')
@@ -243,17 +405,38 @@ class MyWidget(QtGui.QWidget):
             fname=names[0]
         else:
             fname=names[0]+'.csv'
-        df = pd.DataFrame(data={"t": self.xdata, "kg": self.ydata})
+        df = pd.DataFrame(data={"t": self.xdata_raw, "kg": self.ydata_raw})
         df.to_csv(fname, sep=',',index=False)
+
 
     def cleanup(self):
         self.device.close()
         self.refresh_avail_devices_timer.stop()
 
+
     def set_yaxis_options(self):
         yaxis_modal = QtGui.QDialog(self)
 
         yaxis_modal.exec_()
+
+
+#? Should this be a class? I miss structs
+#TODO https://stackoverflow.com/questions/35988/c-like-structures-in-python
+class Stat:
+    def __init__(self, label=None, value=None, unit=None, mode=None):
+        self.label=label
+        self.value=value
+        self.unit=unit
+        self.mode=mode
+    def setLabel(self,label):
+        self.label=label
+    def setValue(self, value):
+        self.value=value
+    def setUnit(self,unit):
+        self.unit=unit
+    def setMode(self, mode):
+        self.mode=mode
+
 
 def main():
 
