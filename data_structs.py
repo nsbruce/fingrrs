@@ -1,20 +1,28 @@
-from typing import NamedTuple
-import PyQt5 #import QWidgets, QtGui
-from dataclasses import dataclass
+from PyQt5 import QtWidgets, QtGui
+from dataclasses import dataclass, field
 
-# class myStat(NamedTuple):
-#     name: str
-#     value: float
-#     qlabel=PyQt5.QtGui.QLabel()
-#     # qlabel: PyQt5.QWidgets.QLabel
-#     display_element: PyQt5.QWidgets.QLCDNumber = PyQt5.QtGui.QLCDNumber()
 
 @dataclass
-class myStat:
+class Stat:
     name: str
-    value: float
-    qlabel:None
-    display_element:None
-    # qlabel=PyQt5.QtGui.QLabel()
-    # # qlabel: PyQt5.QWidgets.QLabel
-    # display_element: PyQt5.QWidgets.QLCDNumber = PyQt5.QtGui.QLCDNumber()
+    qlabel:QtWidgets.QLabel = field(default_factory=QtWidgets.QLabel)
+    display_element:QtWidgets.QLCDNumber=field(default_factory=QtWidgets.QLCDNumber)
+    _value: float = 0.0
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, val):
+        self._value = val
+        self.display_element.display(val)
+    
+
+@dataclass
+class plotOption:
+    def __init__(self, label):
+        self.label=label
+        self.button=QtGui.QRadioButton(self.label)
+    # label: str
+    # button: QtWidgets.QRadioButton=field(default_factory=QtWidgets.QRadioButton)
