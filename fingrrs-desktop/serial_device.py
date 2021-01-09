@@ -62,6 +62,7 @@ class mySerial:
     
     def stop_stream(self):
         self.ser.write(self.cmd_stop)
+        self.flush()
     
     def get_all(self):
         latest=self.ser.read(self.ser.inWaiting())
@@ -71,6 +72,10 @@ class mySerial:
     def get_line(self):
         line = self.ser.readline()
         return self.line_parser(line)
+
+    def flush(self):
+        self.ser.flushInput()
+        self.ser.flushOutput()
 
 
 

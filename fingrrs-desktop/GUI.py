@@ -27,17 +27,16 @@ class MyWidget(QtGui.QWidget):
         self.device = None
         self.available_devices = []
 
-        # print(type(self))
-
         self.xdata_raw=[]
         self.ydata_raw=[]
-
-        # self.ydata_fn = plotter.default_kg
 
         self.is_streaming=False
 
         self.setup_timers()
         self.setup_UI()
+
+        if len(self.available_devices)==1:
+            self.change_device_dropdown.setCurrentIndex(0)
 
     def setup_timers(self):
         self.refresh_avail_devices_timer = QtCore.QTimer()
@@ -61,10 +60,10 @@ class MyWidget(QtGui.QWidget):
     def setup_UI(self):
         # Window properties
         self.setWindowTitle("Fingrrs Desktop")
-        # self.resize(1000,800) # This works though
+        self.resize(1400,800) # This works though
 
         # Setup group for session control buttons
-        session_ctrl_group = QtGui.QGroupBox() # Can put a string in here for a title
+        session_ctrl_group = QtGui.QGroupBox('Device controls') 
         session_ctrl_group_layout = QtGui.QGridLayout()
 
         # Add session control elements
@@ -98,23 +97,38 @@ class MyWidget(QtGui.QWidget):
         yaxis_opts_radio_group = QtGui.QGroupBox('y-Axis Options')
         yaxis_opts_radio_group_layout=QtGui.QGridLayout()
 
-        self.yaxis_opts={'kg': plotOption('kg'), '% weight': plotOption('% weight'), '% max': plotOption('% max')}
+        self.yaxis_opts={
+            'kg': plotOption(label='kg'),
+            '% weight': plotOption(label='% weight'),
+            '% max': plotOption(label='% max')
+        }
+        self.yaxis_opts['kg'].button.setChecked(True)
         for yaxis_opt in self.yaxis_opts.values():
+            yaxis_opt.button.toggled.connect(self.set_yaxis_options)
             yaxis_opts_radio_group_layout.addWidget(yaxis_opt.button)
-        
+            if yaxis_opt.button.isChecked():
+                self.current_yaxis_opt = yaxis_opt
+            yaxis_opt.button.setEnabled(False)
+
         yaxis_opts_radio_group.setLayout(yaxis_opts_radio_group_layout)
         plot_group_layout.addWidget(yaxis_opts_radio_group, 4,0,2,2)
 
-        self.yaxis_opts['kg'].button.setChecked(True)
-        for yaxis_opt in self.yaxis_opts.values():
-            if yaxis_opt.button.isChecked():
-                self.current_yaxis_opt = yaxis_opt
-
         self.plot = pg.PlotWidget()
+        self.plot_format={
+            'pen':pg.mkPen(width=3, color=(0, 0, 0) ),
+            # 'axis-label-styles':{'color':(0,0,0), 'font-size':30},
+            'bottom-label': 'Time (s)',
+            'scale-pen':pg.mkPen(width=2, color=(255, 0, 0), style=QtCore.Qt.DashLine ),
+            'max-arrow-pen':pg.mkPen(width=2,color=(255,0,0)),
+            'max-arrow-brush':pg.mkBrush(color=(255,0,0)),
+            'max-arrow-label-color': (255,0,0)
+            }
+
+        # self.plot.setLabel('left', self.current_yaxis_opt.label)#, **self.plot_format['axis-label-styles'])
+        # self.plot.setLabel('left', self.current_yaxis_opt.label, color=(0,0,0))#, **self.plot_format['axis-label-styles'])
+
         self.initialize_plot()
         plot_group_layout.addWidget(self.plot,0,0,3,5)
-
-
 
         self.save_btn = QtGui.QPushButton('Save data')
         self.save_btn.setToolTip('Save raw data to CSV file')
@@ -171,10 +185,17 @@ class MyWidget(QtGui.QWidget):
         self.modes = ['Max pull', 'Weigh user']
         self.mode_dropdown = QtGui.QComboBox()
         self.mode_dropdown.addItems(self.modes)
-        self.mode_dropdown.setCurrentIndex(0)
-        # self.mode_dropdown.currentIndexChanged.connect(self.set_mode)
-        self.mode_dropdown.setEnabled(False)
+        self.mode_dropdown.setCurrentIndex(-1)
         mode_group_layout.addWidget(self.mode_dropdown)
+
+        def set_mode(index):
+            if index==0: # max pull
+                self.max_pull_mode()
+            elif index==1: # scale mode
+                self.scale_mode()
+            
+        self.mode_dropdown.currentIndexChanged.connect(set_mode)
+        self.mode_dropdown.setEnabled(False)
 
         mode_group.setLayout(mode_group_layout)
 
@@ -182,11 +203,11 @@ class MyWidget(QtGui.QWidget):
         main_layout = QtGui.QGridLayout()
 
         # Give organize main layout
-        main_layout.addWidget(configuration_group,0,0,1,1)
-        main_layout.addWidget(mode_group,1,0,1,1)
-        main_layout.addWidget(session_ctrl_group,2,0,3,1)
+        main_layout.addWidget(configuration_group,0,0)#,1,1)
+        main_layout.addWidget(mode_group,1,0)#,1,1)
+        main_layout.addWidget(session_ctrl_group,2,0,2,1)
+        main_layout.addWidget(stats_group,4,0)#0,6,5,1)
         main_layout.addWidget(plot_group,0,1,5,5)
-        main_layout.addWidget(stats_group,0,6,5,5)
 
         #? For testing
         # test_btn=QtGui.QPushButton('Test')
@@ -199,17 +220,8 @@ class MyWidget(QtGui.QWidget):
         self.show()
 
     def initialize_plot(self):
-        self.plot_format={
-            'pen':pg.mkPen(width=3, color=(0, 0, 0) ),
-            'axis-label-styles':{'color':(0,0,0), 'font-size':30},
-            'bottom-label': 'Time (s)',
-            'scale-pen':pg.mkPen(width=2, color=(255, 0, 0), style=QtCore.Qt.DashLine ),
-            'max-arrow-pen':pg.mkPen(width=2,color=(255,0,0)),
-            'max-arrow-brush':pg.mkBrush(color=(255,0,0)),
-            'max-arrow-label-color': (255,0,0)
-            }
-        self.plot.setLabel('left', self.current_yaxis_opt.label, **self.plot_format['axis-label-styles'])
-        self.plot.setLabel('bottom', self.plot_format['bottom-label'], **self.plot_format['axis-label-styles'])
+        self.plot.setLabel('left', self.current_yaxis_opt.label)#, **self.plot_format['axis-label-styles'])
+        self.plot.setLabel('bottom', self.plot_format['bottom-label'])#, **self.plot_format['axis-label-styles'])
         # self.plot.setMouseEnabled(x=True, y=False)
         self.curve = self.plot.plot(pen=self.plot_format['pen'])
 
@@ -226,6 +238,7 @@ class MyWidget(QtGui.QWidget):
             self.start_btn.setEnabled(True)
             self.change_device_dropdown.setEnabled(True)
             self.mode_dropdown.setEnabled(True)
+            self.mode_dropdown.setCurrentIndex(0)
             self.save_btn.setEnabled(False)
 
             self.stats['current_val'].value=0
@@ -247,10 +260,17 @@ class MyWidget(QtGui.QWidget):
 
 
     def update_plot(self):
+        if self.is_streaming==False:
+            self.clear_plot()
+
         if self.mode_dropdown.currentIndex()==0: # max pull
-            self.curve.setData(self.xdata_raw,self.ydata_raw)
+            if 'kg' in self.current_yaxis_opt.label:
+                self.curve.setData(self.xdata_raw,self.ydata_raw)
+            elif 'weight' in self.current_yaxis_opt.label:
+                self.curve.setData(self.xdata_raw, [(x/self.stats['user_weight'].value)*100 for x in self.ydata_raw])
+            elif 'max' in self.current_yaxis_opt.label:
+                self.curve.setData(self.xdata_raw, [(x/self.stats['max_pull'].value)*100 for x in self.ydata_raw])
         elif self.mode_dropdown.currentIndex()==1: # scale mode
-            # print(f"xdata: {self.xdata_scale}")
             self.curve.setData(self.xdata_scale, self.ydata_scale)
         # curve.setPos(ptr,0) # might be useful if I want a moving window.
 
@@ -284,27 +304,39 @@ class MyWidget(QtGui.QWidget):
 
     def max_pull_mode(self):
         self.mode_timers=[self.data_timer, self.plot_timer, self.stats_timer]
-        self.set_start_mode_timers(25)
+
+        self.yaxis_opts['kg'].button.setEnabled(True)
+        if self.stats['max_pull'].value != 0:
+            self.yaxis_opts['% max'].button.setEnabled(True)
+        if self.stats['user_weight'].value != 0:
+            self.yaxis_opts['% weight'].button.setEnabled(True)
 
     def scale_mode(self):
         self.ydata_scale=[]
         self.xdata_scale=[]
 
+        for yaxis_opt in self.yaxis_opts.values():
+            yaxis_opt.button.setEnabled(False)
+
+        self.stop_btn.setEnabled(False)
         self.mode_timers=[self.data_timer, self.plot_timer, self.stats_timer, self.scale_timer]
-        self.set_start_mode_timers(interval=100)
+
 
     def set_start_mode_timers(self, interval):
         for timer in self.mode_timers:
             timer.setInterval(interval)
             timer.start()
 
+
     def stop_timers(self):
         for timer in self.mode_timers:
             timer.stop()
 
 
-
     def start_btn_pushed(self):
+        buffer=self.device.get_all()
+        del buffer
+
         self.clear_data()
         self.clear_plot()
 
@@ -317,10 +349,9 @@ class MyWidget(QtGui.QWidget):
 
         self.device.start_stream()
         if self.mode_dropdown.currentIndex()==0: # max pull mode
-            self.max_pull_mode()
-        if self.mode_dropdown.currentIndex()==1: # weigh user
-            self.stop_btn.setEnabled(False)
-            self.scale_mode()
+            self.set_start_mode_timers(25)
+        elif self.mode_dropdown.currentIndex()==1: # weigh user
+            self.set_start_mode_timers(interval=100)
         
         self.is_streaming=True
 
@@ -331,7 +362,6 @@ class MyWidget(QtGui.QWidget):
 
 
     def clear_plot(self):
-        # self.curve.setData([],[])
         self.plot.clear()
         self.initialize_plot()
 
@@ -356,8 +386,8 @@ class MyWidget(QtGui.QWidget):
         self.clear_plot_btn.setEnabled(True)
 
         self.stop_timers()
-        self.stats['current_val'].value=0
         self.device.stop_stream()
+        self.stats['current_val'].value=0
         self.is_streaming=False
 
         if self.mode_dropdown.currentIndex()==0: # max pull was measured
@@ -380,6 +410,7 @@ class MyWidget(QtGui.QWidget):
             dlg = UpdateStatDialog(old_val=self.stats['max_pull'].value, new_val=new_val, stat_name='max pull stat')
             if dlg.exec_():
                 self.stats['max_pull'].value = new_val
+                self.yaxis_opts['% max'].button.setEnabled(True)
         elif self.mode_dropdown.currentIndex()==1: #Weight
             dlg = UpdateStatDialog(old_val=self.stats['user_weight'].value, new_val=new_val, stat_name='user weight stat')
             if dlg.exec_():
@@ -407,9 +438,15 @@ class MyWidget(QtGui.QWidget):
 
 
     def set_yaxis_options(self):
-        yaxis_modal = QtGui.QDialog(self)
+        for yaxis_opt in self.yaxis_opts.values():
+            if yaxis_opt.button.isChecked():
+                self.current_yaxis_opt=yaxis_opt
+        self.plot.setLabel('left', self.current_yaxis_opt.label)#, **self.plot_format['axis-label-styles'])
 
-        yaxis_modal.exec_()
+
+        if self.is_streaming==False:
+            self.update_plot()
+
 
 
 def main():
