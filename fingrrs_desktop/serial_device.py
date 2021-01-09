@@ -1,4 +1,4 @@
-import known_devices as kd
+from . import known_devices as kd
 import serial
 import serial.tools.list_ports
 

@@ -11,12 +11,12 @@ import pyqtgraph as pg
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
 
-import known_devices as kd
-import serial_device as sd
-import plotter
-import utils
-from modals import UpdateStatDialog
-from data_structs import Stat, plotOption
+from . import known_devices as kd
+from . import serial_device as sd
+# import plotter
+from . import utils
+from . import modals
+from . import data_structs as ds
 
 
 
@@ -98,9 +98,9 @@ class MyWidget(QtGui.QWidget):
         yaxis_opts_radio_group_layout=QtGui.QGridLayout()
 
         self.yaxis_opts={
-            'kg': plotOption(label='kg'),
-            '% weight': plotOption(label='% weight'),
-            '% max': plotOption(label='% max')
+            'kg': ds.plotOption(label='kg'),
+            '% weight': ds.plotOption(label='% weight'),
+            '% max': ds.plotOption(label='% max')
         }
         self.yaxis_opts['kg'].button.setChecked(True)
         for yaxis_opt in self.yaxis_opts.values():
@@ -164,9 +164,9 @@ class MyWidget(QtGui.QWidget):
         stats_form = QtGui.QFormLayout()
         
         self.stats = {
-            'current_val': Stat(name='current_val', qlabel=QtGui.QLabel('Current value (kg):')),
-            'user_weight': Stat(name='user_weight', qlabel=QtGui.QLabel('User weight (kg):')),
-            'max_pull': Stat(name='max_pull', qlabel=QtGui.QLabel('Max pull (kg):'))
+            'current_val': ds.Stat(name='current_val', qlabel=QtGui.QLabel('Current value (kg):')),
+            'user_weight': ds.Stat(name='user_weight', qlabel=QtGui.QLabel('User weight (kg):')),
+            'max_pull': ds.Stat(name='max_pull', qlabel=QtGui.QLabel('Max pull (kg):'))
         }
 
         for stat in self.stats.values():
@@ -407,12 +407,12 @@ class MyWidget(QtGui.QWidget):
 
     def update_stat_dialog(self, new_val):
         if self.mode_dropdown.currentIndex()==0: #Max pull
-            dlg = UpdateStatDialog(old_val=self.stats['max_pull'].value, new_val=new_val, stat_name='max pull stat')
+            dlg = modals.UpdateStatDialog(old_val=self.stats['max_pull'].value, new_val=new_val, stat_name='max pull stat')
             if dlg.exec_():
                 self.stats['max_pull'].value = new_val
                 self.yaxis_opts['% max'].button.setEnabled(True)
         elif self.mode_dropdown.currentIndex()==1: #Weight
-            dlg = UpdateStatDialog(old_val=self.stats['user_weight'].value, new_val=new_val, stat_name='user weight stat')
+            dlg = modals.UpdateStatDialog(old_val=self.stats['user_weight'].value, new_val=new_val, stat_name='user weight stat')
             if dlg.exec_():
                 self.stats['user_weight'].value = new_val
                 self.mode_dropdown.clear()
