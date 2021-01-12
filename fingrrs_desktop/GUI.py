@@ -1,6 +1,9 @@
 # Import libraries
 import numpy as np
-import pandas as pd
+from scipy.signal import find_peaks
+# import pandas as pd
+import csv
+from itertools import zip_longest
 import sys
 import time
 from dataclasses import dataclass
@@ -13,7 +16,6 @@ pg.setConfigOption('foreground', 'k')
 
 from . import known_devices as kd
 from . import serial_device as sd
-# import plotter
 from . import utils
 from . import modals
 from . import data_structs as ds
@@ -428,8 +430,16 @@ class MyWidget(QtGui.QWidget):
             fname=names[0]
         else:
             fname=names[0]+'.csv'
-        df = pd.DataFrame(data={"t": self.xdata_raw, "kg": self.ydata_raw, "user_weight": self.stats['user_weight'].value, "max_pull": self.stats['max_pull'].value})
-        df.to_csv(fname, sep=',',index=False)
+
+        header=['time','kg','user_weight','max_pull']
+        data = zip_longest(self.xdata_raw,self.ydata_raw,self.stats['user_weight'].value, self.stats['max_pull'].value)
+
+        with open(fname,'w') as outfile:
+            csv.writer(outfile).writerow(header)
+            csv.writer(outfile).writerows(data)
+
+        # df = pd.DataFrame(data={"t": self.xdata_raw, "kg": self.ydata_raw, "user_weight": self.stats['user_weight'].value, "max_pull": self.stats['max_pull'].value})
+        # df.to_csv(fname, sep=',',index=False)
 
 
     def cleanup(self):
