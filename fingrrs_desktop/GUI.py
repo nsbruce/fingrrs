@@ -1,6 +1,5 @@
 # Import libraries
 import numpy as np
-from scipy.signal import find_peaks
 import csv
 from itertools import zip_longest
 import sys
