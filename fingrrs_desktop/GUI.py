@@ -1,7 +1,6 @@
 # Import libraries
 import numpy as np
 from scipy.signal import find_peaks
-# import pandas as pd
 import csv
 from itertools import zip_longest
 import sys
@@ -432,14 +431,11 @@ class MyWidget(QtGui.QWidget):
             fname=names[0]+'.csv'
 
         header=['time','kg','user_weight','max_pull']
-        data = zip_longest(self.xdata_raw,self.ydata_raw,self.stats['user_weight'].value, self.stats['max_pull'].value)
+        data = zip_longest(self.xdata_raw,self.ydata_raw,[self.stats['user_weight'].value], [self.stats['max_pull'].value])
 
         with open(fname,'w') as outfile:
             csv.writer(outfile).writerow(header)
             csv.writer(outfile).writerows(data)
-
-        # df = pd.DataFrame(data={"t": self.xdata_raw, "kg": self.ydata_raw, "user_weight": self.stats['user_weight'].value, "max_pull": self.stats['max_pull'].value})
-        # df.to_csv(fname, sep=',',index=False)
 
 
     def cleanup(self):
