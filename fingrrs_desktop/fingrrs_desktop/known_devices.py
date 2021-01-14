@@ -38,7 +38,7 @@ gStrength={
     'name': 'gStrength V1',
     'baud': 115200,
     'timeout': None,
-    'preferred_port_type': 'usb',
+    'preferred_port_type': 'USB',
     # 'preferred_port_type': 'Bluetooth',
     'cmd_stop': bytes(b'w'),
     'cmd_zero': bytes(b't'),

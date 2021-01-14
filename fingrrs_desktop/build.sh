@@ -1,0 +1,1 @@
+pyinstaller --name 'Fingrrs Desktop' --onefile --hidden-import cmath --windowed --icon ../graphics/icon-mac.icns cli.py

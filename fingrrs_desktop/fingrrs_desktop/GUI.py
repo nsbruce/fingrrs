@@ -60,7 +60,8 @@ class MyWidget(QtGui.QWidget):
     def setup_UI(self):
         # Window properties
         self.setWindowTitle("Fingrrs Desktop")
-        self.resize(1400,800) # This works though
+        self.resize(1400,800)
+        self.setWindowIcon(QtGui.QIcon('../../graphics/icon.png'))
 
         # Setup group for session control buttons
         session_ctrl_group = QtGui.QGroupBox('Device controls') 
@@ -250,7 +251,7 @@ class MyWidget(QtGui.QWidget):
         newly_availably_devices=[]
         for avail_dev in sd.get_available_devices():
             for known_dev in kd.all_known_devices:
-                if known_dev['preferred_port_type'] in avail_dev.device and known_dev['manufacturer']==avail_dev.manufacturer:
+                if known_dev['preferred_port_type'] in avail_dev.hwid:# and known_dev['manufacturer']==avail_dev.manufacturer:
                     newly_availably_devices.append(known_dev)
                 #TODO if not a known device, offer ability to set baud etc. Will need generic known dev item
         if self.available_devices != newly_availably_devices:

@@ -1,6 +1,6 @@
 setup(
     name="Fingrrs Deskop",
-    version="0.1.0",
+    version="0.1.1",
     description="Test your Fingrrs!",
     long_description=README,
     long_description_content_type="text/markdown",

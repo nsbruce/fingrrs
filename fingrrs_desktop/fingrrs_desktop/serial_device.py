@@ -4,12 +4,12 @@ import serial.tools.list_ports
 
 def print_available_devices():
     print("Available devices:")
-    for port, desc, hwid in sorted(serial.tools.list_ports.comports()):
+    for device, desc, hwid in sorted(serial.tools.list_ports.comports()):
         #TODO check if this is the same for windows
         if desc=='n/a' and hwid=='n/a':
             continue
     else:
-        print("{}: {} [{}]".format(port, desc, hwid))
+        print("{}: {} [{}]".format(device, desc, hwid))
 
 def get_available_devices():
     return [x for x in serial.tools.list_ports.comports() if x.hwid!='n/a' and x.description!='n/a']            
@@ -29,13 +29,13 @@ class mySerial:
         self.buffer=None
     
     def get_port(self, preferred_port_type_str):
-        # ports=[port for port, desc, hwid in sorted(serial.tools.list_ports.comports())]
+        # ports=[port for ports, desc, hwid in sorted(serial.tools.list_ports.comports())]
         # for port in ports:
-        #     if preferred_port_type_str in port:
+        #     if preferred_port_type_str in device:
         #         return port
         #TODO handle if port isn't in there
         for port, desc, hwid in sorted(serial.tools.list_ports.comports()):
-            if preferred_port_type_str in port:
+            if preferred_port_type_str in hwid:
                 return port
     
     def __setup_connection__(self):

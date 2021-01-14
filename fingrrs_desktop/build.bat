@@ -1,0 +1,1 @@
+pyinstaller --name="Fingrrs Desktop" --onefile --windowed --icon=..\graphics\icon-windows.ico cli.py
